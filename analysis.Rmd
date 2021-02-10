@@ -1,0 +1,195 @@
+---
+title: "The pitch classifier"
+author: "am49@illinois.edu"
+date: "12/1/2020"
+output:
+  html_document: 
+    theme: default
+    toc: yes
+---
+
+```{r, setup, include = FALSE}
+knitr::opts_chunk$set(echo = FALSE, fig.align = 'center')
+```
+
+```{r, load-packages, include = FALSE}
+# load packages
+library(caret) 
+library(dplyr)
+library(tibble)
+library(rpart)
+library(skimr)
+library(rpart.plot)
+library("randomForest")
+library(mltest)
+
+```
+
+```{r read-data, warning = FALSE, message = FALSE}
+# read subset of data
+pitches_2020_regular = readr::read_csv("data/pitches_2020_regular.csv")
+pitches_2020_missing = readr::read_csv("data/pitches_2020_missing.csv")
+pitches_2020_post = readr::read_csv("data/pitches_2020_post.csv")
+```
+
+***
+
+## Abstract
+
+The objective of this analysis is to to develop a pitch classifier. The analysis was performed utilizing the information of 262592 ball throws;performed data analysis, data cleaning, feature engineering and trained decision tree, random forest models. The random forest model trained on the simple information produced about 90 percent accuracy; therefore using this model a pitch type can be classified into 7 types with about 90 percent confidence.  
+
+
+***
+
+## Introduction
+
+The goal of this analysis is to develop a pitch classifier. The pitch type generally depends on how the ball is gripped, and how the pitcher releases the ball from their hands. So a pitch classifier can be built using data such as velocity, acceleration, position of the release of the ball.The pitch classifier could be used to: 1)Automatically record pitch types.2)Verify and augment human labeled pitch. types.3)Fill in missing pitch type data.
+
+***
+
+## Methods
+
+1.Performed exploratory analysis of data.  
+2.Removed columns with no contribution.  
+3.Removed rows that contained missing values.  
+4.Converted columns containing categorical values to factor type.  
+5.Trained decision tree and random forest models. 
+
+### Data
+
+The analysis was performed employing the information of 262592 records(pitches_2020_regular). The data contained a total of 25 features (predictors: 20-numeric, 3-character type, 1-Data type) and one response variable (pitch_type-character type). 
+
+The raw data in pitches_2020_regular contained a total of 263110 rows, two columns contained few missing data.
+
+```{r}
+skim(pitches_2020_regular)
+```
+The test data(pitches_2020_post) contained 6727 records,two columns contained few missing data.. 
+
+```{r}
+skim(pitches_2020_post)
+```
+performed removal of columns-player_name,game_date,batter,pitcher from both train and test data as they do not contribute in decision-making of pitch_type.
+
+```{r}
+pitches_2020_regular = pitches_2020_regular %>% 
+  select(-player_name,-game_date,-batter,-pitcher) 
+
+pitches_2020_post = pitches_2020_post %>% 
+  select(-player_name,-game_date,-batter,-pitcher)
+
+```
+
+The rows with missing values in both train and test data were removed.
+
+```{r}
+pitches_2020_regular=na.omit(pitches_2020_regular)
+
+pitches_2020_post=na.omit(pitches_2020_post)
+```
+
+There exists an imbalance in the classes of train data.
+
+```{r}
+pitches_2020_regular %>% 
+  group_by(pitch_type) %>%
+  summarise(no_rows = length(pitch_type))
+```
+```{r}
+pitches_2020_post %>% 
+  group_by(pitch_type) %>%
+  summarise(no_rows = length(pitch_type))
+```
+Converted pitch_type,stand,p_throws,zone columns were converted to factor type.
+
+```{r}
+#converting columns to factor type
+pitches_2020_regular$pitch_type=factor(pitches_2020_regular$pitch_type)
+pitches_2020_regular$stand=factor(pitches_2020_regular$stand)
+pitches_2020_regular$p_throws=factor(pitches_2020_regular$p_throws)
+pitches_2020_regular$zone=factor(pitches_2020_regular$zone)
+```
+
+```{r}
+pitches_2020_post$pitch_type=factor(pitches_2020_post$pitch_type)
+pitches_2020_post$stand=factor(pitches_2020_post$stand)
+pitches_2020_post$p_throws=factor(pitches_2020_post$p_throws)
+pitches_2020_post$zone=factor(pitches_2020_post$zone)
+
+```
+
+
+### Modeling
+
+
+Two classifications models- rpart(decision tree), rf(random forest) were considered to identify the pitch type . Accuracy has been used as the evaluation criteria for models with different tuning parameters as well as for the different kinds of statistical models.
+
+rpart model: applied 5-fold cross-validation, experimented with 10 ‘cp’ values (using tuneLength=10), applied "smote" sampling.
+
+rf model: applied 5-fold cross validation,applied "smote" sampling.
+
+
+```{r}
+rpart_trainControl=trainControl(method="cv",number=5,classProbs = TRUE,sampling="smote",savePredictions = TRUE)
+rpart_mod=train(form=pitch_type~.,data=pitches_2020_regular,trControl=rpart_trainControl,method="rpart",metric="ROC",tuneLength=10)
+rpart_mod
+```
+
+```{r}
+rand_trainControl=trainControl(method="cv",number=5,classProbs = TRUE,sampling="smote",savePredictions = TRUE)
+rand1=randomForest( pitch_type~ ., data = pitches_2020_regular, method = "rf",metric = "ROC",
+                      trControl = rand_trainControl)
+rand1
+```
+
+
+***
+
+## Results
+
+```{r}
+ml_test(predict(rpart_mod, pitches_2020_post, type = 'raw'), pitches_2020_post$pitch_type, output.as.table = TRUE)
+```
+
+
+```{r}
+ml_test(predict(rand1, pitches_2020_post), pitches_2020_post$pitch_type, output.as.table = TRUE)
+```
+
+Considering the test accuracies of the two models, the random forest model can be declared as the best model for this scenario or analysis. 
+
+***
+
+## Discussion
+
+Using the above trained random forest model on the balanced data, one can classify the pitch type into 7 different types with 0.9246187 accuracy for CH class, 0.9320066 accuracy for CU class, 0.8781599 accuracy for FC class, 0.9666476 accuracy for FF class, 0.7152282 accuracy for FS class, 0.9368910 for SI class, 0.9476843 accuracy for SL class. 
+***
+
+## Appendix
+
+pitch_type-The type of pitch.
+player_name-Player's name tied to the event of the search
+stand-Side of the plate batter is standing.
+p_throws-Hand pitcher throws with.
+game_date-Date of the Game
+release_speed-Pitch velocities from 2008-16 are via Pitch F/X, and adjusted to roughly out-of-hand release point. All velocities from 2017 and beyond are Statcast, which are reported out-of-hand.
+release_pos_x-Horizontal Release Position of the ball measured in feet from the catcher's perspective.
+release_pos_y-Release position of pitch measured in feet from the catcher's perspective.
+release_pos_z-Vertical Release Position of the ball measured in feet from the catcher's perspective.
+batter-MLB Player Id tied to the play event.
+pitcher-MLB Player Id tied to the play event.
+zone-Zone location of the ball when it crosses the plate from the catcher's perspective.
+pfx_x-Horizontal movement in feet from the catcher's perspective.
+pfx_z-Vertical movement in feet from the catcher's perpsective.
+plate_x-Horizontal position of the ball when it crosses home plate from the catcher's perspective.
+plate_z-Vertical position of the ball when it crosses home plate from the catcher's perspective.
+vx0-The velocity of the pitch, in feet per second, in x-dimension, determined at y=50 feet.
+vy0-The velocity of the pitch, in feet per second, in y-dimension, determined at y=50 feet.
+vz0-The velocity of the pitch, in feet per second, in z-dimension, determined at y=50 feet.
+ax-The acceleration of the pitch, in feet per second per second, in x-dimension, determined at y=50 feet.
+ay-The acceleration of the pitch, in feet per second per second, in y-dimension, determined at y=50 feet.
+az-The acceleration of the pitch, in feet per second per second, in z-dimension, determined at y=50 feet.
+effective_speed-Derived speed based on the the extension of the pitcher's release.
+release_spin_rate-Spin rate of pitch tracked by Statcast.
+release_extension-Release extension of pitch in feet as tracked by Statcast.
+
